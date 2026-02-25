@@ -24,9 +24,44 @@ import {
     Filter,
     Download,
     RefreshCw,
+    Package,
+    Plus,
+    Truck,
+    Heart,
+    Phone,
+    Mail,
+    Building2,
+    Utensils,
+    Shirt,
+    Pill,
+    Anchor,
+    Droplets,
+    Home,
+    Edit,
+    Trash2,
+    X,
 } from 'lucide-react';
 
-type ActiveSection = 'live-map' | 'reports' | 'ai-logs' | 'analytics';
+type ActiveSection = 'live-map' | 'reports' | 'ai-logs' | 'analytics' | 'resources';
+
+type ResourceType = 'boat' | 'food' | 'clothing' | 'medical' | 'water' | 'shelter' | 'transport' | 'other';
+
+interface Resource {
+    id: number;
+    type: ResourceType;
+    name: string;
+    quantity: number;
+    unit: string;
+    location: string;
+    coordinates: string;
+    organization: string;
+    contactName: string;
+    contactPhone: string;
+    contactEmail: string;
+    status: 'available' | 'limited' | 'depleted' | 'reserved';
+    notes: string;
+    timestamp: string;
+}
 
 interface Report {
     id: number;
@@ -94,6 +129,36 @@ export default function Dashboard() {
         { id: 1, area: 'Penang Island', severity: 'high', description: 'Flash flood warning' },
         { id: 2, area: 'Seberang Perai', severity: 'medium', description: 'Heavy thunderstorms expected' },
     ]);
+
+    // Resources state for volunteer/NGO materials
+    const [resources, setResources] = useState<Resource[]>([
+        { id: 1, type: 'boat', name: 'Rescue Boats', quantity: 5, unit: 'units', location: 'George Town Relief Center', coordinates: '5.4141° N, 100.3288° E', organization: 'Malaysian Red Crescent', contactName: 'Ahmad Razak', contactPhone: '+60 12-345-6789', contactEmail: 'ahmad@redcrescent.my', status: 'available', notes: '4-person capacity inflatable boats with oars', timestamp: '1 hour ago' },
+        { id: 2, type: 'food', name: 'Emergency Food Packs', quantity: 500, unit: 'packs', location: 'Bayan Lepas Community Hall', coordinates: '5.2945° N, 100.2610° E', organization: 'Food Bank Penang', contactName: 'Siti Aminah', contactPhone: '+60 14-567-8901', contactEmail: 'siti@foodbankpenang.org', status: 'available', notes: 'Ready-to-eat meals, 3-day supply per pack', timestamp: '2 hours ago' },
+        { id: 3, type: 'clothing', name: 'Dry Clothing Sets', quantity: 200, unit: 'sets', location: 'Air Itam Temple', coordinates: '5.3980° N, 100.2780° E', organization: 'Buddhist Tzu Chi Foundation', contactName: 'Lee Mei Yee', contactPhone: '+60 16-789-0123', contactEmail: 'mei.yee@tzuchi.org.my', status: 'limited', notes: 'Mixed sizes, includes underwear and towels', timestamp: '3 hours ago' },
+        { id: 4, type: 'medical', name: 'First Aid Kits', quantity: 50, unit: 'kits', location: 'Penang General Hospital', coordinates: '5.4200° N, 100.3150° E', organization: 'St. John Ambulance', contactName: 'Dr. Raj Kumar', contactPhone: '+60 17-890-1234', contactEmail: 'raj@stjohn.org.my', status: 'available', notes: 'Standard first aid supplies plus medications', timestamp: '4 hours ago' },
+        { id: 5, type: 'water', name: 'Drinking Water', quantity: 1000, unit: 'bottles', location: 'KOMTAR Distribution Point', coordinates: '5.4140° N, 100.3290° E', organization: 'Spritzer Malaysia', contactName: 'Corporate Affairs', contactPhone: '+60 4-555-0123', contactEmail: 'csr@spritzer.com.my', status: 'available', notes: '1.5L bottles, sponsored donation', timestamp: '5 hours ago' },
+        { id: 6, type: 'shelter', name: 'Emergency Tents', quantity: 25, unit: 'units', location: 'Youth Park Penang', coordinates: '5.4300° N, 100.3100° E', organization: 'Civil Defence Malaysia', contactName: 'Encik Mohd Ali', contactPhone: '+60 18-901-2345', contactEmail: 'ops@civildefence.gov.my', status: 'reserved', notes: '10-person capacity family tents', timestamp: '6 hours ago' },
+        { id: 7, type: 'transport', name: '4x4 Vehicles', quantity: 8, unit: 'vehicles', location: 'Penang City Council Depot', coordinates: '5.4100° N, 100.3200° E', organization: 'Penang Jeep Club', contactName: 'James Tan', contactPhone: '+60 12-234-5678', contactEmail: 'james@penangjeep.com', status: 'available', notes: 'Volunteer drivers available 24/7', timestamp: '30 min ago' },
+        { id: 8, type: 'other', name: 'Power Generators', quantity: 10, unit: 'units', location: 'Jelutong Fire Station', coordinates: '5.3890° N, 100.3180° E', organization: 'TNB Emergency Response', contactName: 'En. Azman', contactPhone: '+60 19-012-3456', contactEmail: 'emergency@tnb.com.my', status: 'limited', notes: '5kW portable generators with fuel', timestamp: '8 hours ago' },
+    ]);
+
+    // Resource form state
+    const [showResourceForm, setShowResourceForm] = useState(false);
+    const [editingResource, setEditingResource] = useState<Resource | null>(null);
+    const [resourceForm, setResourceForm] = useState<Omit<Resource, 'id' | 'timestamp'>>({
+        type: 'food',
+        name: '',
+        quantity: 0,
+        unit: '',
+        location: '',
+        coordinates: '',
+        organization: '',
+        contactName: '',
+        contactPhone: '',
+        contactEmail: '',
+        status: 'available',
+        notes: '',
+    });
 
     // Alert markers data
     const alertMarkers = [
@@ -343,6 +408,20 @@ export default function Dashboard() {
                                 <Activity className="h-5 w-5" />
                                 <span>Analytics</span>
                             </button>
+                            <button
+                                onClick={() => setActiveSection('resources')}
+                                className={`w-full flex items-center gap-3 rounded-lg px-4 py-3 transition-colors ${
+                                    activeSection === 'resources'
+                                        ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30'
+                                        : 'text-slate-300 hover:bg-slate-700/50 border border-transparent'
+                                }`}
+                            >
+                                <Package className="h-5 w-5" />
+                                <span>Resources & Aid</span>
+                                <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+                                    {resources.filter(r => r.status === 'available').length}
+                                </span>
+                            </button>
                         </nav>
 
                         {/* Quick Stats */}
@@ -360,6 +439,10 @@ export default function Dashboard() {
                                 <div className="flex justify-between text-sm">
                                     <span className="text-slate-400">Verified</span>
                                     <span className="font-semibold text-blue-400">{reports.filter(r => r.status === 'verified').length}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">Resources</span>
+                                    <span className="font-semibold text-purple-400">{resources.filter(r => r.status === 'available').length}</span>
                                 </div>
                             </div>
                         </div>
@@ -1006,6 +1089,470 @@ export default function Dashboard() {
                                                 <p className="text-xs text-slate-500">{Math.floor(Math.random() * 50) + 10} reports</p>
                                             </div>
                                         ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Resources & Aid Section */}
+                        {activeSection === 'resources' && (
+                            <div className="space-y-6">
+                                {/* Header */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white">Resources & Aid</h2>
+                                        <p className="text-slate-400">Volunteer and NGO material contributions</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setEditingResource(null);
+                                            setResourceForm({
+                                                type: 'food',
+                                                name: '',
+                                                quantity: 0,
+                                                unit: '',
+                                                location: '',
+                                                coordinates: '',
+                                                organization: '',
+                                                contactName: '',
+                                                contactPhone: '',
+                                                contactEmail: '',
+                                                status: 'available',
+                                                notes: '',
+                                            });
+                                            setShowResourceForm(true);
+                                        }}
+                                        className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                        Add Resource
+                                    </button>
+                                </div>
+
+                                {/* Resource Stats */}
+                                <div className="grid grid-cols-5 gap-4">
+                                    <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="rounded-lg bg-emerald-600/20 p-3">
+                                                <Package className="h-6 w-6 text-emerald-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-2xl font-bold text-white">{resources.length}</p>
+                                                <p className="text-xs text-slate-400">Total Resources</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="rounded-lg bg-green-600/20 p-3">
+                                                <CheckCircle className="h-6 w-6 text-green-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-2xl font-bold text-white">{resources.filter(r => r.status === 'available').length}</p>
+                                                <p className="text-xs text-slate-400">Available</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="rounded-lg bg-amber-600/20 p-3">
+                                                <AlertTriangle className="h-6 w-6 text-amber-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-2xl font-bold text-white">{resources.filter(r => r.status === 'limited').length}</p>
+                                                <p className="text-xs text-slate-400">Limited</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="rounded-lg bg-blue-600/20 p-3">
+                                                <Building2 className="h-6 w-6 text-blue-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-2xl font-bold text-white">{new Set(resources.map(r => r.organization)).size}</p>
+                                                <p className="text-xs text-slate-400">Organizations</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-700 bg-slate-800 p-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="rounded-lg bg-purple-600/20 p-3">
+                                                <Heart className="h-6 w-6 text-purple-400" />
+                                            </div>
+                                            <div>
+                                                <p className="text-2xl font-bold text-white">{resources.filter(r => r.status === 'reserved').length}</p>
+                                                <p className="text-xs text-slate-400">Reserved</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Resource Type Filter Pills */}
+                                <div className="flex flex-wrap gap-2">
+                                    <span className="text-sm text-slate-400 py-2">Filter by type:</span>
+                                    {[
+                                        { type: 'all', icon: Package, label: 'All' },
+                                        { type: 'boat', icon: Anchor, label: 'Boats' },
+                                        { type: 'food', icon: Utensils, label: 'Food' },
+                                        { type: 'clothing', icon: Shirt, label: 'Clothing' },
+                                        { type: 'medical', icon: Pill, label: 'Medical' },
+                                        { type: 'water', icon: Droplets, label: 'Water' },
+                                        { type: 'shelter', icon: Home, label: 'Shelter' },
+                                        { type: 'transport', icon: Truck, label: 'Transport' },
+                                    ].map(({ type, icon: Icon, label }) => (
+                                        <button
+                                            key={type}
+                                            className="flex items-center gap-2 rounded-full border border-slate-600 bg-slate-700/50 px-4 py-2 text-sm text-slate-300 hover:bg-slate-600/50 hover:border-emerald-500/50 transition-colors"
+                                        >
+                                            <Icon className="h-4 w-4" />
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Resources Grid */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    {resources.map((resource) => {
+                                        const typeConfig: Record<ResourceType, { icon: typeof Package; color: string; bg: string }> = {
+                                            boat: { icon: Anchor, color: 'text-blue-400', bg: 'bg-blue-600/20' },
+                                            food: { icon: Utensils, color: 'text-orange-400', bg: 'bg-orange-600/20' },
+                                            clothing: { icon: Shirt, color: 'text-pink-400', bg: 'bg-pink-600/20' },
+                                            medical: { icon: Pill, color: 'text-red-400', bg: 'bg-red-600/20' },
+                                            water: { icon: Droplets, color: 'text-cyan-400', bg: 'bg-cyan-600/20' },
+                                            shelter: { icon: Home, color: 'text-amber-400', bg: 'bg-amber-600/20' },
+                                            transport: { icon: Truck, color: 'text-green-400', bg: 'bg-green-600/20' },
+                                            other: { icon: Package, color: 'text-slate-400', bg: 'bg-slate-600/20' },
+                                        };
+                                        const config = typeConfig[resource.type];
+                                        const TypeIcon = config.icon;
+
+                                        const statusConfig = {
+                                            available: { label: 'Available', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+                                            limited: { label: 'Limited', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+                                            depleted: { label: 'Depleted', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+                                            reserved: { label: 'Reserved', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+                                        };
+
+                                        return (
+                                            <div key={resource.id} className="rounded-lg border border-slate-700 bg-slate-800 p-5 hover:border-slate-600 transition-colors">
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`rounded-lg p-3 ${config.bg}`}>
+                                                            <TypeIcon className={`h-6 w-6 ${config.color}`} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-semibold text-white">{resource.name}</h3>
+                                                            <p className="text-sm text-slate-400 capitalize">{resource.type}</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`rounded-full border px-3 py-1 text-xs font-medium ${statusConfig[resource.status].color}`}>
+                                                        {statusConfig[resource.status].label}
+                                                    </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                                    <div>
+                                                        <p className="text-xs text-slate-500 mb-1">Quantity</p>
+                                                        <p className="text-lg font-semibold text-white">{resource.quantity} <span className="text-sm text-slate-400">{resource.unit}</span></p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-slate-500 mb-1">Location</p>
+                                                        <p className="text-sm text-white">{resource.location}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="border-t border-slate-700 pt-4 mb-4">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Building2 className="h-4 w-4 text-slate-500" />
+                                                        <span className="text-sm text-slate-300">{resource.organization}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 text-xs text-slate-400">
+                                                        <span className="flex items-center gap-1">
+                                                            <Phone className="h-3 w-3" />
+                                                            {resource.contactPhone}
+                                                        </span>
+                                                        <span className="flex items-center gap-1">
+                                                            <Mail className="h-3 w-3" />
+                                                            {resource.contactEmail}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {resource.notes && (
+                                                    <p className="text-xs text-slate-500 italic mb-4">"{resource.notes}"</p>
+                                                )}
+
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-slate-500">Updated {resource.timestamp}</span>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingResource(resource);
+                                                                setResourceForm({
+                                                                    type: resource.type,
+                                                                    name: resource.name,
+                                                                    quantity: resource.quantity,
+                                                                    unit: resource.unit,
+                                                                    location: resource.location,
+                                                                    coordinates: resource.coordinates,
+                                                                    organization: resource.organization,
+                                                                    contactName: resource.contactName,
+                                                                    contactPhone: resource.contactPhone,
+                                                                    contactEmail: resource.contactEmail,
+                                                                    status: resource.status,
+                                                                    notes: resource.notes,
+                                                                });
+                                                                setShowResourceForm(true);
+                                                            }}
+                                                            className="rounded-lg border border-slate-600 bg-slate-700/50 p-2 text-slate-400 hover:bg-slate-600/50 hover:text-white transition-colors"
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setResources(prev => prev.filter(r => r.id !== resource.id))}
+                                                            className="rounded-lg border border-red-600/30 bg-red-600/10 p-2 text-red-400 hover:bg-red-600/20 transition-colors"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Resource Form Modal */}
+                        {showResourceForm && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                                <div className="w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto">
+                                    <div className="border-b border-slate-700 p-6">
+                                        <div className="flex items-center justify-between">
+                                            <h2 className="text-xl font-bold text-white">
+                                                {editingResource ? 'Edit Resource' : 'Add New Resource'}
+                                            </h2>
+                                            <button
+                                                onClick={() => setShowResourceForm(false)}
+                                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                                            >
+                                                <X className="h-5 w-5" />
+                                            </button>
+                                        </div>
+                                        <p className="text-sm text-slate-400 mt-1">
+                                            {editingResource ? 'Update resource information' : 'Register materials available for disaster relief'}
+                                        </p>
+                                    </div>
+
+                                    <div className="p-6 space-y-6">
+                                        {/* Resource Type */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">Resource Type</label>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    { type: 'boat', icon: Anchor, label: 'Boat' },
+                                                    { type: 'food', icon: Utensils, label: 'Food' },
+                                                    { type: 'clothing', icon: Shirt, label: 'Clothing' },
+                                                    { type: 'medical', icon: Pill, label: 'Medical' },
+                                                    { type: 'water', icon: Droplets, label: 'Water' },
+                                                    { type: 'shelter', icon: Home, label: 'Shelter' },
+                                                    { type: 'transport', icon: Truck, label: 'Transport' },
+                                                    { type: 'other', icon: Package, label: 'Other' },
+                                                ].map(({ type, icon: Icon, label }) => (
+                                                    <button
+                                                        key={type}
+                                                        type="button"
+                                                        onClick={() => setResourceForm(prev => ({ ...prev, type: type as ResourceType }))}
+                                                        className={`flex flex-col items-center gap-2 rounded-lg border p-3 transition-colors ${
+                                                            resourceForm.type === type
+                                                                ? 'border-emerald-500 bg-emerald-600/20 text-emerald-400'
+                                                                : 'border-slate-600 bg-slate-700/50 text-slate-400 hover:border-slate-500'
+                                                        }`}
+                                                    >
+                                                        <Icon className="h-5 w-5" />
+                                                        <span className="text-xs font-medium">{label}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Resource Name and Quantity */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-2">Resource Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={resourceForm.name}
+                                                    onChange={(e) => setResourceForm(prev => ({ ...prev, name: e.target.value }))}
+                                                    placeholder="e.g., Emergency Food Packs"
+                                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-2">Quantity</label>
+                                                    <input
+                                                        type="number"
+                                                        value={resourceForm.quantity}
+                                                        onChange={(e) => setResourceForm(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
+                                                        placeholder="0"
+                                                        className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-2">Unit</label>
+                                                    <input
+                                                        type="text"
+                                                        value={resourceForm.unit}
+                                                        onChange={(e) => setResourceForm(prev => ({ ...prev, unit: e.target.value }))}
+                                                        placeholder="e.g., packs, units"
+                                                        className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Location */}
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                                                <input
+                                                    type="text"
+                                                    value={resourceForm.location}
+                                                    onChange={(e) => setResourceForm(prev => ({ ...prev, location: e.target.value }))}
+                                                    placeholder="e.g., George Town Relief Center"
+                                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-2">GPS Coordinates</label>
+                                                <input
+                                                    type="text"
+                                                    value={resourceForm.coordinates}
+                                                    onChange={(e) => setResourceForm(prev => ({ ...prev, coordinates: e.target.value }))}
+                                                    placeholder="e.g., 5.4141° N, 100.3288° E"
+                                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Organization */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">Organization / NGO Name</label>
+                                            <input
+                                                type="text"
+                                                value={resourceForm.organization}
+                                                onChange={(e) => setResourceForm(prev => ({ ...prev, organization: e.target.value }))}
+                                                placeholder="e.g., Malaysian Red Crescent"
+                                                className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                            />
+                                        </div>
+
+                                        {/* Contact Information */}
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-2">Contact Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={resourceForm.contactName}
+                                                    onChange={(e) => setResourceForm(prev => ({ ...prev, contactName: e.target.value }))}
+                                                    placeholder="Contact person"
+                                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-2">Phone</label>
+                                                <input
+                                                    type="tel"
+                                                    value={resourceForm.contactPhone}
+                                                    onChange={(e) => setResourceForm(prev => ({ ...prev, contactPhone: e.target.value }))}
+                                                    placeholder="+60 12-345-6789"
+                                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                                                <input
+                                                    type="email"
+                                                    value={resourceForm.contactEmail}
+                                                    onChange={(e) => setResourceForm(prev => ({ ...prev, contactEmail: e.target.value }))}
+                                                    placeholder="email@organization.org"
+                                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Status */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">Availability Status</label>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    { status: 'available', label: 'Available', color: 'emerald' },
+                                                    { status: 'limited', label: 'Limited', color: 'amber' },
+                                                    { status: 'reserved', label: 'Reserved', color: 'blue' },
+                                                    { status: 'depleted', label: 'Depleted', color: 'red' },
+                                                ].map(({ status, label, color }) => (
+                                                    <button
+                                                        key={status}
+                                                        type="button"
+                                                        onClick={() => setResourceForm(prev => ({ ...prev, status: status as Resource['status'] }))}
+                                                        className={`rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
+                                                            resourceForm.status === status
+                                                                ? `border-${color}-500 bg-${color}-600/20 text-${color}-400`
+                                                                : 'border-slate-600 bg-slate-700/50 text-slate-400 hover:border-slate-500'
+                                                        }`}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Notes */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-slate-300 mb-2">Additional Notes</label>
+                                            <textarea
+                                                value={resourceForm.notes}
+                                                onChange={(e) => setResourceForm(prev => ({ ...prev, notes: e.target.value }))}
+                                                placeholder="Any additional details about this resource..."
+                                                rows={3}
+                                                className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-slate-700 p-6 flex items-center justify-end gap-3">
+                                        <button
+                                            onClick={() => setShowResourceForm(false)}
+                                            className="rounded-lg border border-slate-600 bg-slate-700/50 px-6 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-600/50 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (editingResource) {
+                                                    // Update existing resource
+                                                    setResources(prev => prev.map(r => 
+                                                        r.id === editingResource.id 
+                                                            ? { ...resourceForm, id: r.id, timestamp: 'Just now' }
+                                                            : r
+                                                    ));
+                                                } else {
+                                                    // Add new resource
+                                                    const newResource: Resource = {
+                                                        ...resourceForm,
+                                                        id: Math.max(...resources.map(r => r.id)) + 1,
+                                                        timestamp: 'Just now',
+                                                    };
+                                                    setResources(prev => [newResource, ...prev]);
+                                                }
+                                                setShowResourceForm(false);
+                                            }}
+                                            className="rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+                                        >
+                                            {editingResource ? 'Update Resource' : 'Add Resource'}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
