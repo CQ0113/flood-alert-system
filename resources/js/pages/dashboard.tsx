@@ -1,6 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Head } from '@inertiajs/react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import {
+    reportsApi,
+    aiLogsApi,
+    resourcesApi,
+    weatherWarningsApi,
+    type Report as ApiReport,
+    type AIVerificationLog as ApiAIVerificationLog,
+    type Resource as ApiResource,
+    type WeatherWarning as ApiWeatherWarning,
+} from '@/lib/api';
 import {
     Search,
     MapPin,
@@ -40,6 +50,8 @@ import {
     Edit,
     Trash2,
     X,
+    Locate,
+    Loader2,
 } from 'lucide-react';
 
 type ActiveSection = 'live-map' | 'reports' | 'ai-logs' | 'analytics' | 'resources';
@@ -97,50 +109,113 @@ export default function Dashboard() {
     const [mapLoaded, setMapLoaded] = useState(false);
     const [activeSection, setActiveSection] = useState<ActiveSection>('live-map');
     const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [showResourcesOnMap, setShowResourcesOnMap] = useState(false);
     const mapRef = useRef<HTMLDivElement>(null);
     const googleMapRef = useRef<google.maps.Map | null>(null);
+    const resourceMarkersRef = useRef<google.maps.Marker[]>([]);
 
-    // Mock state for reports (expanded)
-    const [reports] = useState<Report[]>([
-        { id: 1, location: 'George Town', type: 'Flash Flood', status: 'verified', timestamp: '2 min ago', submittedBy: 'Ahmad bin Hassan', coordinates: '5.4141° N, 100.3288° E' },
-        { id: 2, location: 'Bayan Lepas', type: 'Heavy Rain', status: 'pending', timestamp: '5 min ago', submittedBy: 'Siti Nurhaliza', coordinates: '5.2945° N, 100.2610° E' },
-        { id: 3, location: 'Jalan Macalister', type: 'Road Blockage', status: 'verified', timestamp: '8 min ago', submittedBy: 'Lee Wei Ming', coordinates: '5.4180° N, 100.3250° E' },
-        { id: 4, location: 'Air Itam', type: 'Landslide Risk', status: 'pending', timestamp: '12 min ago', submittedBy: 'Raj Kumar', coordinates: '5.3980° N, 100.2780° E' },
-        { id: 5, location: 'Gurney Drive', type: 'Water Level Rising', status: 'rejected', timestamp: '15 min ago', submittedBy: 'Anonymous', coordinates: '5.4380° N, 100.3100° E' },
-        { id: 6, location: 'Tanjung Tokong', type: 'Low Visibility', status: 'verified', timestamp: '18 min ago', submittedBy: 'Chen Mei Ling', coordinates: '5.4520° N, 100.3050° E' },
-        { id: 7, location: 'Jelutong', type: 'Flash Flood', status: 'pending', timestamp: '22 min ago', submittedBy: 'Muhammad Faiz', coordinates: '5.3890° N, 100.3180° E' },
-        { id: 8, location: 'Pulau Tikus', type: 'Heavy Rain', status: 'verified', timestamp: '25 min ago', submittedBy: 'Tan Ah Kow', coordinates: '5.4350° N, 100.3150° E' },
-    ]);
+    // State for data from API
+    const [reports, setReports] = useState<Report[]>([]);
+    const [aiLogs, setAiLogs] = useState<AIVerificationLog[]>([]);
+    const [weatherWarnings, setWeatherWarnings] = useState<WeatherWarning[]>([]);
+    const [resources, setResources] = useState<Resource[]>([]);
 
-    // Mock AI verification logs
-    const [aiLogs] = useState<AIVerificationLog[]>([
-        { id: 1, reportId: 1, action: 'verified', confidence: 98.5, timestamp: '2 min ago', details: 'Image analysis confirmed flooding. Water level estimated at 45cm.', model: 'FloodVision-v3' },
-        { id: 2, reportId: 3, action: 'verified', confidence: 94.2, timestamp: '8 min ago', details: 'Road obstruction detected. Multiple vehicles visible in image.', model: 'HazardDetect-v2' },
-        { id: 3, reportId: 5, action: 'rejected', confidence: 23.1, timestamp: '15 min ago', details: 'Image quality too low. No hazard patterns detected.', model: 'FloodVision-v3' },
-        { id: 4, reportId: 6, action: 'verified', confidence: 89.7, timestamp: '18 min ago', details: 'Haze/fog detected. Visibility estimated below 100m.', model: 'VisibilityAI-v1' },
-        { id: 5, reportId: 2, action: 'pending_review', confidence: 67.3, timestamp: '5 min ago', details: 'Uncertain classification. Requires human review.', model: 'FloodVision-v3' },
-        { id: 6, reportId: 4, action: 'pending_review', confidence: 72.8, timestamp: '12 min ago', details: 'Potential landslide indicators detected. Confidence moderate.', model: 'GeoHazard-v1' },
-        { id: 7, reportId: 8, action: 'verified', confidence: 91.4, timestamp: '25 min ago', details: 'Heavy precipitation confirmed via weather station correlation.', model: 'WeatherSync-v2' },
-        { id: 8, reportId: 7, action: 'pending_review', confidence: 58.9, timestamp: '22 min ago', details: 'Image partially obscured. Flood indicators inconclusive.', model: 'FloodVision-v3' },
-    ]);
+    // Filtered data based on search query
+    const filteredReports = useMemo(() => {
+        if (!searchQuery.trim()) return reports;
+        const query = searchQuery.toLowerCase();
+        return reports.filter(report =>
+            report.location.toLowerCase().includes(query) ||
+            report.type.toLowerCase().includes(query) ||
+            (report.submittedBy?.toLowerCase().includes(query) ?? false) ||
+            report.status.toLowerCase().includes(query)
+        );
+    }, [reports, searchQuery]);
 
-    // Mock state for weather warnings
-    const [weatherWarnings] = useState<WeatherWarning[]>([
-        { id: 1, area: 'Penang Island', severity: 'high', description: 'Flash flood warning' },
-        { id: 2, area: 'Seberang Perai', severity: 'medium', description: 'Heavy thunderstorms expected' },
-    ]);
+    const filteredAiLogs = useMemo(() => {
+        if (!searchQuery.trim()) return aiLogs;
+        const query = searchQuery.toLowerCase();
+        return aiLogs.filter(log =>
+            log.details.toLowerCase().includes(query) ||
+            log.action.toLowerCase().includes(query) ||
+            log.model.toLowerCase().includes(query)
+        );
+    }, [aiLogs, searchQuery]);
 
-    // Resources state for volunteer/NGO materials
-    const [resources, setResources] = useState<Resource[]>([
-        { id: 1, type: 'boat', name: 'Rescue Boats', quantity: 5, unit: 'units', location: 'George Town Relief Center', coordinates: '5.4141° N, 100.3288° E', organization: 'Malaysian Red Crescent', contactName: 'Ahmad Razak', contactPhone: '+60 12-345-6789', contactEmail: 'ahmad@redcrescent.my', status: 'available', notes: '4-person capacity inflatable boats with oars', timestamp: '1 hour ago' },
-        { id: 2, type: 'food', name: 'Emergency Food Packs', quantity: 500, unit: 'packs', location: 'Bayan Lepas Community Hall', coordinates: '5.2945° N, 100.2610° E', organization: 'Food Bank Penang', contactName: 'Siti Aminah', contactPhone: '+60 14-567-8901', contactEmail: 'siti@foodbankpenang.org', status: 'available', notes: 'Ready-to-eat meals, 3-day supply per pack', timestamp: '2 hours ago' },
-        { id: 3, type: 'clothing', name: 'Dry Clothing Sets', quantity: 200, unit: 'sets', location: 'Air Itam Temple', coordinates: '5.3980° N, 100.2780° E', organization: 'Buddhist Tzu Chi Foundation', contactName: 'Lee Mei Yee', contactPhone: '+60 16-789-0123', contactEmail: 'mei.yee@tzuchi.org.my', status: 'limited', notes: 'Mixed sizes, includes underwear and towels', timestamp: '3 hours ago' },
-        { id: 4, type: 'medical', name: 'First Aid Kits', quantity: 50, unit: 'kits', location: 'Penang General Hospital', coordinates: '5.4200° N, 100.3150° E', organization: 'St. John Ambulance', contactName: 'Dr. Raj Kumar', contactPhone: '+60 17-890-1234', contactEmail: 'raj@stjohn.org.my', status: 'available', notes: 'Standard first aid supplies plus medications', timestamp: '4 hours ago' },
-        { id: 5, type: 'water', name: 'Drinking Water', quantity: 1000, unit: 'bottles', location: 'KOMTAR Distribution Point', coordinates: '5.4140° N, 100.3290° E', organization: 'Spritzer Malaysia', contactName: 'Corporate Affairs', contactPhone: '+60 4-555-0123', contactEmail: 'csr@spritzer.com.my', status: 'available', notes: '1.5L bottles, sponsored donation', timestamp: '5 hours ago' },
-        { id: 6, type: 'shelter', name: 'Emergency Tents', quantity: 25, unit: 'units', location: 'Youth Park Penang', coordinates: '5.4300° N, 100.3100° E', organization: 'Civil Defence Malaysia', contactName: 'Encik Mohd Ali', contactPhone: '+60 18-901-2345', contactEmail: 'ops@civildefence.gov.my', status: 'reserved', notes: '10-person capacity family tents', timestamp: '6 hours ago' },
-        { id: 7, type: 'transport', name: '4x4 Vehicles', quantity: 8, unit: 'vehicles', location: 'Penang City Council Depot', coordinates: '5.4100° N, 100.3200° E', organization: 'Penang Jeep Club', contactName: 'James Tan', contactPhone: '+60 12-234-5678', contactEmail: 'james@penangjeep.com', status: 'available', notes: 'Volunteer drivers available 24/7', timestamp: '30 min ago' },
-        { id: 8, type: 'other', name: 'Power Generators', quantity: 10, unit: 'units', location: 'Jelutong Fire Station', coordinates: '5.3890° N, 100.3180° E', organization: 'TNB Emergency Response', contactName: 'En. Azman', contactPhone: '+60 19-012-3456', contactEmail: 'emergency@tnb.com.my', status: 'limited', notes: '5kW portable generators with fuel', timestamp: '8 hours ago' },
-    ]);
+    const filteredResources = useMemo(() => {
+        if (!searchQuery.trim()) return resources;
+        const query = searchQuery.toLowerCase();
+        return resources.filter(resource =>
+            resource.name.toLowerCase().includes(query) ||
+            resource.location.toLowerCase().includes(query) ||
+            resource.organization.toLowerCase().includes(query) ||
+            resource.type.toLowerCase().includes(query)
+        );
+    }, [resources, searchQuery]);
+
+    // Geolocation state
+    const [isLocating, setIsLocating] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+    // Navigate map to user's current location
+    const navigateToMyLocation = useCallback(() => {
+        if (!navigator.geolocation) {
+            alert('Geolocation is not supported by your browser');
+            return;
+        }
+
+        setIsLocating(true);
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                setUserLocation({ lat: latitude, lng: longitude });
+                
+                if (googleMapRef.current) {
+                    googleMapRef.current.panTo({ lat: latitude, lng: longitude });
+                    googleMapRef.current.setZoom(15);
+                    setActiveSection('live-map');
+                }
+                setIsLocating(false);
+            },
+            (error) => {
+                console.error('Geolocation error:', error);
+                alert('Unable to get your location. Please check your browser permissions.');
+                setIsLocating(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        );
+    }, []);
+
+    // Navigate map to searched location using Google Geocoding
+    const navigateMapToSearch = useCallback(async () => {
+        if (!searchQuery.trim() || !googleMapRef.current) return;
+        
+        setIsSearching(true);
+        
+        try {
+            // Use Google Geocoding API to search for any location
+            const { Geocoder } = await importLibrary('geocoding') as google.maps.GeocodingLibrary;
+            const geocoder = new Geocoder();
+            
+            const response = await geocoder.geocode({ address: searchQuery });
+            
+            if (response.results && response.results.length > 0) {
+                const location = response.results[0].geometry.location;
+                googleMapRef.current.panTo(location);
+                googleMapRef.current.setZoom(15);
+                setActiveSection('live-map');
+            } else {
+                alert(`Location "${searchQuery}" not found. Try a different search term.`);
+            }
+        } catch (error) {
+            console.error('Geocoding error:', error);
+            alert('Unable to search for location. Please try again.');
+        } finally {
+            setIsSearching(false);
+        }
+    }, [searchQuery]);
 
     // Resource form state
     const [showResourceForm, setShowResourceForm] = useState(false);
@@ -160,30 +235,71 @@ export default function Dashboard() {
         notes: '',
     });
 
-    // Alert markers data
-    const alertMarkers = [
-        { 
-            id: 1, 
-            position: { lat: 5.4141, lng: 100.3288 }, // George Town
-            title: 'George Town',
-            description: 'Flash Flood Alert',
-            severity: 'critical' as const
-        },
-        { 
-            id: 2, 
-            position: { lat: 5.2945, lng: 100.2610 }, // Bayan Lepas
-            title: 'Bayan Lepas',
-            description: 'Heavy Rain Warning',
-            severity: 'warning' as const
-        },
-        { 
-            id: 3, 
-            position: { lat: 5.4680, lng: 100.2500 }, // Tanjung Bungah
-            title: 'Tanjung Bungah',
-            description: 'Normal Conditions',
-            severity: 'normal' as const
-        },
-    ];
+    // Fetch data from API
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [reportsData, aiLogsData, weatherData, resourcesData] = await Promise.all([
+                    reportsApi.getAll(),
+                    aiLogsApi.getAll(),
+                    weatherWarningsApi.getAll(),
+                    resourcesApi.getAll(),
+                ]);
+
+                setReports(reportsData.map((r: ApiReport) => ({
+                    id: r.id,
+                    location: r.location,
+                    type: r.typeLabel,
+                    status: r.status,
+                    timestamp: r.timestamp,
+                    submittedBy: r.submittedBy || undefined,
+                    imageUrl: r.imageUrl || undefined,
+                    coordinates: r.coordinates || undefined,
+                })));
+
+                setAiLogs(aiLogsData.map((l: ApiAIVerificationLog) => ({
+                    id: l.id,
+                    reportId: l.reportId,
+                    action: l.action,
+                    confidence: l.confidence,
+                    timestamp: l.timestamp,
+                    details: l.details || '',
+                    model: l.model || '',
+                })));
+
+                setWeatherWarnings(weatherData.map((w: ApiWeatherWarning) => ({
+                    id: w.id,
+                    area: w.area,
+                    severity: w.severity,
+                    description: w.description,
+                })));
+
+                setResources(resourcesData.map((r: ApiResource) => ({
+                    id: r.id,
+                    type: r.type,
+                    name: r.name,
+                    quantity: r.quantity,
+                    unit: r.unit,
+                    location: r.location,
+                    coordinates: r.coordinates || '',
+                    organization: r.organization,
+                    contactName: r.contactName,
+                    contactPhone: r.contactPhone || '',
+                    contactEmail: r.contactEmail || '',
+                    status: r.status,
+                    notes: r.notes || '',
+                    timestamp: r.timestamp,
+                })));
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
 
     // Initialize Google Maps
     useEffect(() => {
@@ -203,24 +319,31 @@ export default function Dashboard() {
         const initMap = async () => {
             try {
                 const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
-                const { Marker } = await importLibrary('marker') as google.maps.MarkerLibrary;
 
                 if (mapRef.current && !googleMapRef.current) {
-                    // Dark mode map styles
+                    // Dark mode map styles - hide POI icons (restaurants, shops, etc.)
                     const darkMapStyles: google.maps.MapTypeStyle[] = [
                         { elementType: 'geometry', stylers: [{ color: '#1e293b' }] },
                         { elementType: 'labels.text.stroke', stylers: [{ color: '#1e293b' }] },
                         { elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] },
                         { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#475569' }] },
                         { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] },
-                        { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#334155' }] },
-                        { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] },
-                        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1e3a3a' }] },
-                        { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#4ade80' }] },
+                        // Hide all POI icons and labels
+                        { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.government', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.medical', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.place_of_worship', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.school', stylers: [{ visibility: 'off' }] },
+                        { featureType: 'poi.sports_complex', stylers: [{ visibility: 'off' }] },
+                        // Keep parks visible but simplified
+                        { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1e3a3a' }, { visibility: 'simplified' }] },
+                        { featureType: 'poi.park', elementType: 'labels', stylers: [{ visibility: 'off' }] },
                         { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#475569' }] },
                         { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] },
                         { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#64748b' }] },
-                        { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#334155' }] },
+                        { featureType: 'transit', stylers: [{ visibility: 'off' }] },
                         { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f172a' }] },
                         { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] },
                     ];
@@ -231,50 +354,15 @@ export default function Dashboard() {
                         styles: darkMapStyles,
                         disableDefaultUI: true,
                         zoomControl: true,
+                        zoomControlOptions: {
+                            position: google.maps.ControlPosition.RIGHT_CENTER,
+                        },
                         mapTypeControl: false,
                         streetViewControl: false,
-                        fullscreenControl: true,
+                        fullscreenControl: false,
                     });
 
                     googleMapRef.current = map;
-
-                    // Add markers with custom icons
-                    alertMarkers.forEach((marker) => {
-                        const markerColor = 
-                            marker.severity === 'critical' ? '#ef4444' : 
-                            marker.severity === 'warning' ? '#f59e0b' : '#10b981';
-
-                        const svgMarker = {
-                            path: google.maps.SymbolPath.CIRCLE,
-                            fillColor: markerColor,
-                            fillOpacity: 1,
-                            strokeColor: '#ffffff',
-                            strokeWeight: 2,
-                            scale: marker.severity === 'critical' ? 12 : marker.severity === 'warning' ? 10 : 8,
-                        };
-
-                        const mapMarker = new Marker({
-                            position: marker.position,
-                            map: map,
-                            icon: svgMarker,
-                            title: marker.title,
-                        });
-
-                        // Info window
-                        const infoWindow = new google.maps.InfoWindow({
-                            content: `
-                                <div style="padding: 8px; color: #1e293b;">
-                                    <h3 style="font-weight: 600; margin: 0 0 4px 0; color: ${markerColor};">${marker.title}</h3>
-                                    <p style="margin: 0; font-size: 12px; color: #64748b;">${marker.description}</p>
-                                </div>
-                            `,
-                        });
-
-                        mapMarker.addListener('click', () => {
-                            infoWindow.open(map, mapMarker);
-                        });
-                    });
-
                     setMapLoaded(true);
                 }
             } catch (error: unknown) {
@@ -284,6 +372,97 @@ export default function Dashboard() {
 
         initMap();
     }, []);
+
+    // Effect to manage resource markers on map
+    useEffect(() => {
+        const updateResourceMarkers = async () => {
+            if (!googleMapRef.current) return;
+
+            // Clear existing resource markers
+            resourceMarkersRef.current.forEach(marker => marker.setMap(null));
+            resourceMarkersRef.current = [];
+
+            if (!showResourcesOnMap) return;
+
+            try {
+                const { Marker } = await importLibrary('marker') as google.maps.MarkerLibrary;
+
+                const resourceTypeColors: Record<ResourceType, string> = {
+                    boat: '#3b82f6',      // blue
+                    food: '#f97316',      // orange
+                    clothing: '#ec4899',  // pink
+                    medical: '#ef4444',   // red
+                    water: '#06b6d4',     // cyan
+                    shelter: '#f59e0b',   // amber
+                    transport: '#22c55e', // green
+                    other: '#64748b',     // slate
+                };
+
+                resources.forEach((resource) => {
+                    if (!resource.coordinates) return;
+
+                    // Parse coordinates like "5.4141° N, 100.3288° E"
+                    const coordMatch = resource.coordinates.match(/([\d.]+)°\s*[NS],\s*([\d.]+)°\s*[EW]/);
+                    if (!coordMatch) return;
+
+                    const lat = parseFloat(coordMatch[1]);
+                    const lng = parseFloat(coordMatch[2]);
+                    const color = resourceTypeColors[resource.type] || '#64748b';
+
+                    const svgMarker = {
+                        path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
+                        fillColor: color,
+                        fillOpacity: 1,
+                        strokeColor: '#ffffff',
+                        strokeWeight: 2,
+                        scale: 1.5,
+                        anchor: new google.maps.Point(12, 24),
+                    };
+
+                    const marker = new Marker({
+                        position: { lat, lng },
+                        map: googleMapRef.current!,
+                        icon: svgMarker,
+                        title: resource.name,
+                    });
+
+                    const statusColors = {
+                        available: '#22c55e',
+                        limited: '#f59e0b',
+                        depleted: '#ef4444',
+                        reserved: '#3b82f6',
+                    };
+
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: `
+                            <div style="padding: 8px; color: #1e293b; min-width: 180px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <div style="width: 10px; height: 10px; border-radius: 50%; background: ${color};"></div>
+                                    <h3 style="font-weight: 600; margin: 0; font-size: 14px;">${resource.name}</h3>
+                                </div>
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #64748b;">${resource.type.charAt(0).toUpperCase() + resource.type.slice(1)} • ${resource.quantity} ${resource.unit}</p>
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #64748b;">${resource.location}</p>
+                                <p style="margin: 0 0 4px 0; font-size: 12px; color: #64748b;">${resource.organization}</p>
+                                <span style="display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 500; background: ${statusColors[resource.status]}20; color: ${statusColors[resource.status]};">
+                                    ${resource.status.charAt(0).toUpperCase() + resource.status.slice(1)}
+                                </span>
+                            </div>
+                        `,
+                    });
+
+                    marker.addListener('click', () => {
+                        infoWindow.open(googleMapRef.current!, marker);
+                    });
+
+                    resourceMarkersRef.current.push(marker);
+                });
+            } catch (error) {
+                console.error('Error adding resource markers:', error);
+            }
+        };
+
+        updateResourceMarkers();
+    }, [showResourcesOnMap, resources, mapLoaded]);
 
     // Live clock
     useEffect(() => {
@@ -332,14 +511,55 @@ export default function Dashboard() {
                         {/* Search Bar */}
                         <div className="flex-1 max-w-xl mx-8">
                             <div className="relative">
-                                <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                                {isSearching ? (
+                                    <Loader2 className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-emerald-400 animate-spin pointer-events-none" />
+                                ) : (
+                                    <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                )}
                                 <input
                                     type="text"
-                                    placeholder="Search locations, reports, alerts..."
+                                    placeholder="Search any location (e.g. Kuala Lumpur, Penang...)"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 py-2.5 pl-10 pr-4 text-sm text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !isSearching) {
+                                            navigateMapToSearch();
+                                        }
+                                    }}
+                                    disabled={isSearching}
+                                    className="w-full rounded-lg border border-slate-600 bg-slate-700/50 py-2.5 pl-10 pr-24 text-sm text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
                                 />
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                    {searchQuery && !isSearching && (
+                                        <button
+                                            onClick={() => setSearchQuery('')}
+                                            className="p-1 text-slate-400 hover:text-white transition-colors"
+                                            title="Clear search"
+                                        >
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => navigateMapToSearch()}
+                                        disabled={isSearching || !searchQuery.trim()}
+                                        className="p-1.5 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                        title="Search location on map"
+                                    >
+                                        <Search className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        onClick={navigateToMyLocation}
+                                        disabled={isLocating}
+                                        className="p-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                        title="Navigate to my location"
+                                    >
+                                        {isLocating ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <Locate className="h-4 w-4" />
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -457,6 +677,24 @@ export default function Dashboard() {
                                 <div className="relative mb-6 h-[60vh] rounded-lg border border-slate-700 bg-slate-800 overflow-hidden">
                                     {/* Google Maps Container */}
                                     <div ref={mapRef} className="absolute inset-0 w-full h-full" />
+                                    
+                                    {/* Map Controls - Toggle Resources */}
+                                    {mapLoaded && (
+                                        <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
+                                            <button
+                                                onClick={() => setShowResourcesOnMap(!showResourcesOnMap)}
+                                                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium shadow-lg transition-all ${
+                                                    showResourcesOnMap
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700/90'
+                                                }`}
+                                                title={showResourcesOnMap ? 'Hide Resources & Aid' : 'Show Resources & Aid'}
+                                            >
+                                                <Package className="h-4 w-4" />
+                                                <span>{showResourcesOnMap ? 'Hide' : 'Show'} Resources</span>
+                                            </button>
+                                        </div>
+                                    )}
                                     
                                     {/* Fallback placeholder when Google Maps is not loaded */}
                                     {!mapLoaded && (
@@ -747,7 +985,7 @@ export default function Dashboard() {
                                         </div>
                                     </div>
                                     <div className="divide-y divide-slate-700">
-                                        {reports.map((report) => (
+                                        {filteredReports.map((report) => (
                                             <div
                                                 key={report.id}
                                                 className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-slate-700/30 transition-colors cursor-pointer items-center"
@@ -785,6 +1023,12 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
                                         ))}
+                                        {filteredReports.length === 0 && (
+                                            <div className="px-6 py-12 text-center">
+                                                <Search className="h-12 w-12 text-slate-500 mx-auto mb-3" />
+                                                <p className="text-slate-400">No reports found matching "{searchQuery}"</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -904,7 +1148,7 @@ export default function Dashboard() {
 
                                 {/* Logs List */}
                                 <div className="space-y-3">
-                                    {aiLogs.map((log) => (
+                                    {filteredAiLogs.map((log) => (
                                         <div key={log.id} className={`rounded-lg border p-4 ${
                                             log.action === 'verified' ? 'border-emerald-500/30 bg-emerald-500/5' :
                                             log.action === 'rejected' ? 'border-red-500/30 bg-red-500/5' :
@@ -949,6 +1193,12 @@ export default function Dashboard() {
                                             </p>
                                         </div>
                                     ))}
+                                    {filteredAiLogs.length === 0 && (
+                                        <div className="px-6 py-12 text-center rounded-lg border border-slate-700 bg-slate-800/50">
+                                            <Search className="h-12 w-12 text-slate-500 mx-auto mb-3" />
+                                            <p className="text-slate-400">No AI logs found matching "{searchQuery}"</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -1213,7 +1463,7 @@ export default function Dashboard() {
 
                                 {/* Resources Grid */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    {resources.map((resource) => {
+                                    {filteredResources.map((resource) => {
                                         const typeConfig: Record<ResourceType, { icon: typeof Package; color: string; bg: string }> = {
                                             boat: { icon: Anchor, color: 'text-blue-400', bg: 'bg-blue-600/20' },
                                             food: { icon: Utensils, color: 'text-orange-400', bg: 'bg-orange-600/20' },
@@ -1310,7 +1560,14 @@ export default function Dashboard() {
                                                             <Edit className="h-4 w-4" />
                                                         </button>
                                                         <button
-                                                            onClick={() => setResources(prev => prev.filter(r => r.id !== resource.id))}
+                                                            onClick={async () => {
+                                                                try {
+                                                                    await resourcesApi.delete(resource.id);
+                                                                    setResources(prev => prev.filter(r => r.id !== resource.id));
+                                                                } catch (error) {
+                                                                    console.error('Error deleting resource:', error);
+                                                                }
+                                                            }}
                                                             className="rounded-lg border border-red-600/30 bg-red-600/10 p-2 text-red-400 hover:bg-red-600/20 transition-colors"
                                                         >
                                                             <Trash2 className="h-4 w-4" />
@@ -1320,6 +1577,12 @@ export default function Dashboard() {
                                             </div>
                                         );
                                     })}
+                                    {filteredResources.length === 0 && (
+                                        <div className="col-span-2 px-6 py-12 text-center rounded-lg border border-slate-700 bg-slate-800/50">
+                                            <Search className="h-12 w-12 text-slate-500 mx-auto mb-3" />
+                                            <p className="text-slate-400">No resources found matching "{searchQuery}"</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -1530,24 +1793,73 @@ export default function Dashboard() {
                                             Cancel
                                         </button>
                                         <button
-                                            onClick={() => {
-                                                if (editingResource) {
-                                                    // Update existing resource
-                                                    setResources(prev => prev.map(r => 
-                                                        r.id === editingResource.id 
-                                                            ? { ...resourceForm, id: r.id, timestamp: 'Just now' }
-                                                            : r
-                                                    ));
-                                                } else {
-                                                    // Add new resource
-                                                    const newResource: Resource = {
-                                                        ...resourceForm,
-                                                        id: Math.max(...resources.map(r => r.id)) + 1,
-                                                        timestamp: 'Just now',
+                                            onClick={async () => {
+                                                try {
+                                                    const resourceData = {
+                                                        type: resourceForm.type,
+                                                        name: resourceForm.name,
+                                                        quantity: resourceForm.quantity,
+                                                        unit: resourceForm.unit,
+                                                        location: resourceForm.location,
+                                                        coordinates: resourceForm.coordinates || null,
+                                                        latitude: null as number | null,
+                                                        longitude: null as number | null,
+                                                        organization: resourceForm.organization,
+                                                        contactName: resourceForm.contactName,
+                                                        contactPhone: resourceForm.contactPhone || null,
+                                                        contactEmail: resourceForm.contactEmail || null,
+                                                        status: resourceForm.status,
+                                                        notes: resourceForm.notes || null,
                                                     };
-                                                    setResources(prev => [newResource, ...prev]);
+
+                                                    if (editingResource) {
+                                                        // Update existing resource
+                                                        const updated = await resourcesApi.update(editingResource.id, resourceData);
+                                                        setResources(prev => prev.map(r => 
+                                                            r.id === editingResource.id 
+                                                                ? {
+                                                                    id: updated.id,
+                                                                    type: updated.type,
+                                                                    name: updated.name,
+                                                                    quantity: updated.quantity,
+                                                                    unit: updated.unit,
+                                                                    location: updated.location,
+                                                                    coordinates: updated.coordinates || '',
+                                                                    organization: updated.organization,
+                                                                    contactName: updated.contactName,
+                                                                    contactPhone: updated.contactPhone || '',
+                                                                    contactEmail: updated.contactEmail || '',
+                                                                    status: updated.status,
+                                                                    notes: updated.notes || '',
+                                                                    timestamp: updated.timestamp,
+                                                                }
+                                                                : r
+                                                        ));
+                                                    } else {
+                                                        // Add new resource
+                                                        const created = await resourcesApi.create(resourceData);
+                                                        const newResource: Resource = {
+                                                            id: created.id,
+                                                            type: created.type,
+                                                            name: created.name,
+                                                            quantity: created.quantity,
+                                                            unit: created.unit,
+                                                            location: created.location,
+                                                            coordinates: created.coordinates || '',
+                                                            organization: created.organization,
+                                                            contactName: created.contactName,
+                                                            contactPhone: created.contactPhone || '',
+                                                            contactEmail: created.contactEmail || '',
+                                                            status: created.status,
+                                                            notes: created.notes || '',
+                                                            timestamp: created.timestamp,
+                                                        };
+                                                        setResources(prev => [newResource, ...prev]);
+                                                    }
+                                                    setShowResourceForm(false);
+                                                } catch (error) {
+                                                    console.error('Error saving resource:', error);
                                                 }
-                                                setShowResourceForm(false);
                                             }}
                                             className="rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
                                         >

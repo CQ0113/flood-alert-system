@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Head } from '@inertiajs/react';
+import { reportsApi, type Report as ApiReport } from '@/lib/api';
 import {
     Camera,
     MapPin,
@@ -30,13 +31,28 @@ export default function Report() {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Mock nearby reports
-    const [nearbyReports] = useState<NearbyReport[]>([
-        { id: 1, type: 'Water Level Rising', location: 'Jalan Penang', time: '3 min ago', verified: true },
-        { id: 2, type: 'Low Visibility', location: 'Gurney Drive', time: '8 min ago', verified: true },
-        { id: 3, type: 'Blocked Road', location: 'Lebuh Chulia', time: '15 min ago', verified: false },
-        { id: 4, type: 'Water Level Rising', location: 'Air Itam', time: '22 min ago', verified: true },
-    ]);
+    // Nearby reports from API
+    const [nearbyReports, setNearbyReports] = useState<NearbyReport[]>([]);
+
+    // Fetch nearby reports on mount
+    useEffect(() => {
+        const fetchNearbyReports = async () => {
+            try {
+                const reports = await reportsApi.getAll();
+                setNearbyReports(reports.slice(0, 5).map((r: ApiReport) => ({
+                    id: r.id,
+                    type: r.typeLabel,
+                    location: r.location,
+                    time: r.timestamp,
+                    verified: r.status === 'verified',
+                })));
+            } catch (error) {
+                console.error('Error fetching nearby reports:', error);
+            }
+        };
+
+        fetchNearbyReports();
+    }, []);
 
     const hazardTypes = [
         { value: 'water-rising', label: 'Water Level Rising' },
@@ -70,19 +86,32 @@ export default function Report() {
 
         setIsSubmitting(true);
         
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        setIsSubmitting(false);
-        setSubmitSuccess(true);
-        
-        // Reset after showing success
-        setTimeout(() => {
-            setSubmitSuccess(false);
-            setPhoto(null);
-            setPhotoPreview(null);
-            setHazardType('');
-        }, 3000);
+        try {
+            const formData = new FormData();
+            formData.append('image', photo);
+            formData.append('type', hazardType);
+            formData.append('location', 'George Town');
+            formData.append('coordinates', location);
+            formData.append('latitude', '5.4141');
+            formData.append('longitude', '100.3288');
+            
+            await reportsApi.create(formData);
+            
+            setSubmitSuccess(true);
+            
+            // Reset after showing success
+            setTimeout(() => {
+                setSubmitSuccess(false);
+                setPhoto(null);
+                setPhotoPreview(null);
+                setHazardType('');
+            }, 3000);
+        } catch (error) {
+            console.error('Error submitting report:', error);
+            alert('Error submitting report. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleDragOver = (e: React.DragEvent) => {

@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import {
+    resourcesApi,
+    disasterAlertsApi,
+    subscriptionsApi,
+    type Resource as ApiResource,
+    type DisasterAlert as ApiDisasterAlert,
+} from '@/lib/api';
+import {
     AlertTriangle,
     Bell,
     Mail,
@@ -84,18 +91,59 @@ export default function ClientPortal() {
     const [resourceSearch, setResourceSearch] = useState('');
     const [resourceTypeFilter, setResourceTypeFilter] = useState<ResourceType | 'all'>('all');
     const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Mock resources data (same as dashboard)
-    const [resources] = useState<Resource[]>([
-        { id: 1, type: 'boat', name: 'Rescue Boats', quantity: 5, unit: 'units', location: 'George Town Relief Center', coordinates: '5.4141° N, 100.3288° E', organization: 'Malaysian Red Crescent', contactName: 'Ahmad Razak', contactPhone: '+60 12-345-6789', contactEmail: 'ahmad@redcrescent.my', status: 'available', notes: '4-person capacity inflatable boats with oars', timestamp: '1 hour ago', distance: '2.3 km' },
-        { id: 2, type: 'food', name: 'Emergency Food Packs', quantity: 500, unit: 'packs', location: 'Bayan Lepas Community Hall', coordinates: '5.2945° N, 100.2610° E', organization: 'Food Bank Penang', contactName: 'Siti Aminah', contactPhone: '+60 14-567-8901', contactEmail: 'siti@foodbankpenang.org', status: 'available', notes: 'Ready-to-eat meals, 3-day supply per pack', timestamp: '2 hours ago', distance: '5.1 km' },
-        { id: 3, type: 'clothing', name: 'Dry Clothing Sets', quantity: 200, unit: 'sets', location: 'Air Itam Temple', coordinates: '5.3980° N, 100.2780° E', organization: 'Buddhist Tzu Chi Foundation', contactName: 'Lee Mei Yee', contactPhone: '+60 16-789-0123', contactEmail: 'mei.yee@tzuchi.org.my', status: 'limited', notes: 'Mixed sizes, includes underwear and towels', timestamp: '3 hours ago', distance: '3.7 km' },
-        { id: 4, type: 'medical', name: 'First Aid Kits', quantity: 50, unit: 'kits', location: 'Penang General Hospital', coordinates: '5.4200° N, 100.3150° E', organization: 'St. John Ambulance', contactName: 'Dr. Raj Kumar', contactPhone: '+60 17-890-1234', contactEmail: 'raj@stjohn.org.my', status: 'available', notes: 'Standard first aid supplies plus medications', timestamp: '4 hours ago', distance: '1.8 km' },
-        { id: 5, type: 'water', name: 'Drinking Water', quantity: 1000, unit: 'bottles', location: 'KOMTAR Distribution Point', coordinates: '5.4140° N, 100.3290° E', organization: 'Spritzer Malaysia', contactName: 'Corporate Affairs', contactPhone: '+60 4-555-0123', contactEmail: 'csr@spritzer.com.my', status: 'available', notes: '1.5L bottles, sponsored donation', timestamp: '5 hours ago', distance: '0.5 km' },
-        { id: 6, type: 'shelter', name: 'Emergency Tents', quantity: 25, unit: 'units', location: 'Youth Park Penang', coordinates: '5.4300° N, 100.3100° E', organization: 'Civil Defence Malaysia', contactName: 'Encik Mohd Ali', contactPhone: '+60 18-901-2345', contactEmail: 'ops@civildefence.gov.my', status: 'reserved', notes: '10-person capacity family tents', timestamp: '6 hours ago', distance: '4.2 km' },
-        { id: 7, type: 'transport', name: '4x4 Vehicles', quantity: 8, unit: 'vehicles', location: 'Penang City Council Depot', coordinates: '5.4100° N, 100.3200° E', organization: 'Penang Jeep Club', contactName: 'James Tan', contactPhone: '+60 12-234-5678', contactEmail: 'james@penangjeep.com', status: 'available', notes: 'Volunteer drivers available 24/7', timestamp: '30 min ago', distance: '1.2 km' },
-        { id: 8, type: 'other', name: 'Power Generators', quantity: 10, unit: 'units', location: 'Jelutong Fire Station', coordinates: '5.3890° N, 100.3180° E', organization: 'TNB Emergency Response', contactName: 'En. Azman', contactPhone: '+60 19-012-3456', contactEmail: 'emergency@tnb.com.my', status: 'limited', notes: '5kW portable generators with fuel', timestamp: '8 hours ago', distance: '2.9 km' },
-    ]);
+    // State for data from API
+    const [resources, setResources] = useState<Resource[]>([]);
+    const [alerts, setAlerts] = useState<DisasterAlert[]>([]);
+
+    // Fetch data from API
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [resourcesData, alertsData] = await Promise.all([
+                    resourcesApi.getAll(),
+                    disasterAlertsApi.getAll(),
+                ]);
+
+                setResources(resourcesData.map((r: ApiResource) => ({
+                    id: r.id,
+                    type: r.type,
+                    name: r.name,
+                    quantity: r.quantity,
+                    unit: r.unit,
+                    location: r.location,
+                    coordinates: r.coordinates || '',
+                    organization: r.organization,
+                    contactName: r.contactName,
+                    contactPhone: r.contactPhone || '',
+                    contactEmail: r.contactEmail || '',
+                    status: r.status,
+                    notes: r.notes || '',
+                    timestamp: r.timestamp,
+                })));
+
+                setAlerts(alertsData.map((a: ApiDisasterAlert) => ({
+                    id: a.id,
+                    type: a.type,
+                    severity: a.severity,
+                    title: a.title,
+                    description: a.description,
+                    location: a.location,
+                    issuedAt: a.issuedAt,
+                    validUntil: a.validUntil,
+                    instructions: a.instructions,
+                })));
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
 
     // Filter resources based on search and type
     const filteredResources = resources.filter(resource => {
@@ -106,76 +154,6 @@ export default function ClientPortal() {
         const matchesType = resourceTypeFilter === 'all' || resource.type === resourceTypeFilter;
         return matchesSearch && matchesType && resource.status !== 'depleted';
     });
-
-    // Mock disaster alerts
-    const [alerts] = useState<DisasterAlert[]>([
-        {
-            id: 1,
-            type: 'flood',
-            severity: 'critical',
-            title: 'Flash Flood Warning - George Town',
-            description: 'Heavy rainfall has caused flash flooding in low-lying areas of George Town. Water levels are rising rapidly in several neighborhoods.',
-            location: 'George Town, Penang Island',
-            issuedAt: '2 hours ago',
-            validUntil: 'Until 10:00 PM today',
-            instructions: [
-                'Move to higher ground immediately if in affected areas',
-                'Avoid walking or driving through flood waters',
-                'Keep emergency supplies ready',
-                'Monitor official channels for updates',
-                'Call 999 for emergencies',
-            ],
-        },
-        {
-            id: 2,
-            type: 'storm',
-            severity: 'high',
-            title: 'Severe Thunderstorm Alert',
-            description: 'A severe thunderstorm system is approaching Penang from the northeast. Expect heavy rain, strong winds, and possible lightning.',
-            location: 'Penang State',
-            issuedAt: '4 hours ago',
-            validUntil: 'Until 8:00 AM tomorrow',
-            instructions: [
-                'Stay indoors during the storm',
-                'Secure loose outdoor items',
-                'Unplug electrical devices',
-                'Stay away from windows and doors',
-                'Have flashlights and batteries ready',
-            ],
-        },
-        {
-            id: 3,
-            type: 'landslide',
-            severity: 'medium',
-            title: 'Landslide Risk Advisory - Air Itam',
-            description: 'Due to saturated soil conditions from recent rainfall, landslide risk is elevated in hilly areas of Air Itam and surrounding regions.',
-            location: 'Air Itam, Penang Hill vicinity',
-            issuedAt: '6 hours ago',
-            validUntil: 'Until further notice',
-            instructions: [
-                'Avoid hillside areas during heavy rain',
-                'Watch for signs of ground movement',
-                'Report any cracks or unusual terrain changes',
-                'Have evacuation plan ready',
-            ],
-        },
-        {
-            id: 4,
-            type: 'haze',
-            severity: 'low',
-            title: 'Air Quality Advisory',
-            description: 'Air quality has deteriorated slightly due to regional haze. API reading is currently at 85 (Moderate).',
-            location: 'Northern Peninsular Malaysia',
-            issuedAt: '12 hours ago',
-            validUntil: 'Ongoing monitoring',
-            instructions: [
-                'Sensitive groups should limit outdoor activities',
-                'Keep windows closed when API is high',
-                'Use air purifiers if available',
-                'Wear N95 mask outdoors if sensitive',
-            ],
-        },
-    ]);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -193,11 +171,21 @@ export default function ClientPortal() {
     const handleSubscribe = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubscribing(true);
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        setIsSubscribing(false);
-        setSubscribeSuccess(true);
-        setTimeout(() => setSubscribeSuccess(false), 5000);
+        try {
+            await subscriptionsApi.create({
+                email: subscribeMethod === 'telegram' ? undefined : email,
+                telegram_id: subscribeMethod === 'email' ? undefined : telegramId,
+                method: subscribeMethod,
+            });
+            setSubscribeSuccess(true);
+            setEmail('');
+            setTelegramId('');
+            setTimeout(() => setSubscribeSuccess(false), 5000);
+        } catch (error) {
+            console.error('Error subscribing:', error);
+        } finally {
+            setIsSubscribing(false);
+        }
     };
 
     const getSeverityConfig = (severity: DisasterAlert['severity']) => {
