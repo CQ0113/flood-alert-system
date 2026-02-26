@@ -17,18 +17,18 @@ class ResourceController extends Controller
         $query = Resource::orderBy('updated_at', 'desc');
 
         if ($request->has('type')) {
-            $query->where('type', $request->type);
+            $query->where('type', $request->input('type'));
         }
 
         if ($request->has('status')) {
-            $query->where('status', $request->status);
+            $query->where('status', $request->input('status'));
         }
 
         if ($request->has('organization')) {
-            $query->where('organization', 'like', '%' . $request->organization . '%');
+            $query->where('organization', 'like', '%' . $request->input('organization') . '%');
         }
 
-        $resources = $query->get()->map(function ($resource) {
+        $resources = $query->get()->map(function (Resource $resource) {
             return $this->formatResource($resource);
         });
 
@@ -40,6 +40,12 @@ class ResourceController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        $request->merge([
+            'contact_name' => $request->input('contact_name', $request->input('contactName')),
+            'contact_phone' => $request->input('contact_phone', $request->input('contactPhone')),
+            'contact_email' => $request->input('contact_email', $request->input('contactEmail')),
+        ]);
+
         $validated = $request->validate([
             'type' => 'required|in:boat,food,clothing,medical,water,shelter,transport,other',
             'name' => 'required|string|max:255',
@@ -77,6 +83,12 @@ class ResourceController extends Controller
      */
     public function update(Request $request, Resource $resource): JsonResponse
     {
+        $request->merge([
+            'contact_name' => $request->input('contact_name', $request->input('contactName')),
+            'contact_phone' => $request->input('contact_phone', $request->input('contactPhone')),
+            'contact_email' => $request->input('contact_email', $request->input('contactEmail')),
+        ]);
+
         $validated = $request->validate([
             'type' => 'sometimes|in:boat,food,clothing,medical,water,shelter,transport,other',
             'name' => 'sometimes|string|max:255',

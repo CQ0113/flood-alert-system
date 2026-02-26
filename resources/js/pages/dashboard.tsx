@@ -220,6 +220,13 @@ export default function Dashboard() {
     // Resource form state
     const [showResourceForm, setShowResourceForm] = useState(false);
     const [editingResource, setEditingResource] = useState<Resource | null>(null);
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
+    const [locationSearchQuery, setLocationSearchQuery] = useState('');
+    const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+    const [selectedPickerPoint, setSelectedPickerPoint] = useState<{ lat: number; lng: number } | null>(null);
+    const locationPickerMapRef = useRef<HTMLDivElement>(null);
+    const locationPickerGoogleMapRef = useRef<google.maps.Map | null>(null);
+    const locationPickerMarkerRef = useRef<google.maps.Marker | null>(null);
     const [resourceForm, setResourceForm] = useState<Omit<Resource, 'id' | 'timestamp'>>({
         type: 'food',
         name: '',
@@ -234,6 +241,166 @@ export default function Dashboard() {
         status: 'available',
         notes: '',
     });
+
+    const formatCoordinateText = useCallback((latitude: number, longitude: number): string => {
+        const latDirection = latitude >= 0 ? 'N' : 'S';
+        const lngDirection = longitude >= 0 ? 'E' : 'W';
+        return `${Math.abs(latitude).toFixed(4)}° ${latDirection}, ${Math.abs(longitude).toFixed(4)}° ${lngDirection}`;
+    }, []);
+
+    const parseCoordinateText = useCallback((coordinates: string): { latitude: number; longitude: number } | null => {
+        const text = coordinates.trim();
+        if (!text) return null;
+
+        const match = text.match(/^([+-]?\d+(?:\.\d+)?)°?\s*([NS])?\s*,\s*([+-]?\d+(?:\.\d+)?)°?\s*([EW])?$/i);
+        if (!match) return null;
+
+        let latitude = parseFloat(match[1]);
+        const latDirection = match[2]?.toUpperCase();
+        let longitude = parseFloat(match[3]);
+        const lngDirection = match[4]?.toUpperCase();
+
+        if (latDirection === 'N') latitude = Math.abs(latitude);
+        if (latDirection === 'S') latitude = -Math.abs(latitude);
+        if (lngDirection === 'E') longitude = Math.abs(longitude);
+        if (lngDirection === 'W') longitude = -Math.abs(longitude);
+
+        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+            return null;
+        }
+
+        return { latitude, longitude };
+    }, []);
+
+    const placeLocationMarker = useCallback(async (latitude: number, longitude: number) => {
+        if (!locationPickerGoogleMapRef.current) return;
+
+        const { Marker } = await importLibrary('marker') as google.maps.MarkerLibrary;
+
+        if (locationPickerMarkerRef.current) {
+            locationPickerMarkerRef.current.setMap(null);
+        }
+
+        locationPickerMarkerRef.current = new Marker({
+            position: { lat: latitude, lng: longitude },
+            map: locationPickerGoogleMapRef.current,
+            title: 'Selected location',
+        });
+
+        setSelectedPickerPoint({ lat: latitude, lng: longitude });
+        setResourceForm(prev => ({
+            ...prev,
+            coordinates: formatCoordinateText(latitude, longitude),
+        }));
+    }, [formatCoordinateText]);
+
+    const reverseGeocodeLocation = useCallback(async (latitude: number, longitude: number) => {
+        try {
+            const { Geocoder } = await importLibrary('geocoding') as google.maps.GeocodingLibrary;
+            const geocoder = new Geocoder();
+            const response = await geocoder.geocode({ location: { lat: latitude, lng: longitude } });
+            const address = response.results?.[0]?.formatted_address;
+
+            if (address) {
+                setLocationSearchQuery(address);
+                setResourceForm(prev => ({
+                    ...prev,
+                    location: address,
+                }));
+            }
+        } catch (error) {
+            console.error('Reverse geocoding error:', error);
+        }
+    }, []);
+
+    const searchLocationOnMap = useCallback(async () => {
+        if (!locationSearchQuery.trim() || !locationPickerGoogleMapRef.current) return;
+
+        setIsSearchingLocation(true);
+        try {
+            const { Geocoder } = await importLibrary('geocoding') as google.maps.GeocodingLibrary;
+            const geocoder = new Geocoder();
+            const response = await geocoder.geocode({ address: locationSearchQuery });
+            const firstResult = response.results?.[0];
+
+            if (!firstResult) {
+                alert('Address not found. Try a different keyword.');
+                return;
+            }
+
+            const latitude = firstResult.geometry.location.lat();
+            const longitude = firstResult.geometry.location.lng();
+
+            locationPickerGoogleMapRef.current.panTo({ lat: latitude, lng: longitude });
+            locationPickerGoogleMapRef.current.setZoom(16);
+
+            await placeLocationMarker(latitude, longitude);
+
+            setResourceForm(prev => ({
+                ...prev,
+                location: firstResult.formatted_address,
+            }));
+        } catch (error) {
+            console.error('Address search error:', error);
+            alert('Unable to search address right now.');
+        } finally {
+            setIsSearchingLocation(false);
+        }
+    }, [locationSearchQuery, placeLocationMarker]);
+
+    const initializeLocationPickerMap = useCallback(async () => {
+        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+        if (!apiKey || apiKey === 'your_google_maps_api_key_here') {
+            alert('Google Maps API key is not configured.');
+            return;
+        }
+
+        if (!locationPickerMapRef.current) return;
+
+        setOptions({ key: apiKey, v: 'weekly' });
+        const { Map } = await importLibrary('maps') as google.maps.MapsLibrary;
+
+        const parsedCoordinates = parseCoordinateText(resourceForm.coordinates);
+        const initialCenter = parsedCoordinates
+            ? { lat: parsedCoordinates.latitude, lng: parsedCoordinates.longitude }
+            : { lat: 5.4141, lng: 100.3288 };
+
+        const map = new Map(locationPickerMapRef.current, {
+            center: initialCenter,
+            zoom: parsedCoordinates ? 16 : 12,
+            disableDefaultUI: true,
+            zoomControl: true,
+            fullscreenControl: false,
+            streetViewControl: false,
+        });
+
+        locationPickerGoogleMapRef.current = map;
+
+        if (parsedCoordinates) {
+            await placeLocationMarker(parsedCoordinates.latitude, parsedCoordinates.longitude);
+        } else {
+            setSelectedPickerPoint(null);
+        }
+
+        map.addListener('click', async (event: google.maps.MapMouseEvent) => {
+            if (!event.latLng) return;
+
+            const latitude = event.latLng.lat();
+            const longitude = event.latLng.lng();
+            await placeLocationMarker(latitude, longitude);
+            await reverseGeocodeLocation(latitude, longitude);
+        });
+    }, [parseCoordinateText, resourceForm.coordinates, placeLocationMarker, reverseGeocodeLocation]);
+
+    useEffect(() => {
+        if (!showLocationPicker) return;
+
+        const timeoutId = window.setTimeout(() => {
+            void initializeLocationPickerMap();
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [showLocationPicker, initializeLocationPickerMap]);
 
     // Fetch data from API
     useEffect(() => {
@@ -1693,10 +1860,21 @@ export default function Dashboard() {
                                                 <input
                                                     type="text"
                                                     value={resourceForm.coordinates}
-                                                    onChange={(e) => setResourceForm(prev => ({ ...prev, coordinates: e.target.value }))}
-                                                    placeholder="e.g., 5.4141° N, 100.3288° E"
+                                                    readOnly
+                                                    placeholder="Choose on map to auto-fill"
                                                     className="w-full rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                                                 />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setLocationSearchQuery(resourceForm.location || '');
+                                                        setShowLocationPicker(true);
+                                                    }}
+                                                    className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-700/50 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-600/50 transition-colors"
+                                                >
+                                                    <MapPin className="h-3.5 w-3.5" />
+                                                    Open Google Map Picker
+                                                </button>
                                             </div>
                                         </div>
 
@@ -1795,6 +1973,7 @@ export default function Dashboard() {
                                         <button
                                             onClick={async () => {
                                                 try {
+                                                    const parsedCoordinates = parseCoordinateText(resourceForm.coordinates);
                                                     const resourceData = {
                                                         type: resourceForm.type,
                                                         name: resourceForm.name,
@@ -1802,8 +1981,8 @@ export default function Dashboard() {
                                                         unit: resourceForm.unit,
                                                         location: resourceForm.location,
                                                         coordinates: resourceForm.coordinates || null,
-                                                        latitude: null as number | null,
-                                                        longitude: null as number | null,
+                                                        latitude: parsedCoordinates?.latitude ?? null,
+                                                        longitude: parsedCoordinates?.longitude ?? null,
                                                         organization: resourceForm.organization,
                                                         contactName: resourceForm.contactName,
                                                         contactPhone: resourceForm.contactPhone || null,
@@ -1865,6 +2044,66 @@ export default function Dashboard() {
                                         >
                                             {editingResource ? 'Update Resource' : 'Add Resource'}
                                         </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showLocationPicker && (
+                            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                                <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-slate-800 shadow-2xl">
+                                    <div className="border-b border-slate-700 p-4">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-white">Pick Resource Location</h3>
+                                                <p className="text-xs text-slate-400">Search address or click on map to auto-fill GPS coordinates.</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowLocationPicker(false)}
+                                                className="rounded-lg p-2 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                                            >
+                                                <X className="h-5 w-5" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-4 space-y-3">
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={locationSearchQuery}
+                                                onChange={(e) => setLocationSearchQuery(e.target.value)}
+                                                placeholder="Search address (e.g., Komtar, Penang)"
+                                                className="flex-1 rounded-lg border border-slate-600 bg-slate-700/50 px-4 py-2.5 text-sm text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => void searchLocationOnMap()}
+                                                disabled={isSearchingLocation}
+                                                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                            >
+                                                {isSearchingLocation ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                                Search
+                                            </button>
+                                        </div>
+
+                                        <div ref={locationPickerMapRef} className="h-[420px] w-full rounded-lg border border-slate-700" />
+
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-xs text-slate-400">
+                                                {selectedPickerPoint
+                                                    ? `Selected: ${formatCoordinateText(selectedPickerPoint.lat, selectedPickerPoint.lng)}`
+                                                    : 'No point selected yet'}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowLocationPicker(false)}
+                                                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
+                                            >
+                                                Use this location
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

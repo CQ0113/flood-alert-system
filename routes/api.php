@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AiVerificationLogController;
 use App\Http\Controllers\Api\AlertSubscriptionController;
 use App\Http\Controllers\Api\DisasterAlertController;
+use App\Http\Controllers\Api\N8nAiVerificationWebhookController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ResourceController;
 use App\Http\Controllers\Api\WeatherWarningController;
@@ -25,6 +26,9 @@ Route::delete('/reports/{report}', [ReportController::class, 'destroy']);
 // AI Verification Logs
 Route::get('/ai-logs', [AiVerificationLogController::class, 'index']);
 Route::get('/ai-logs/{aiVerificationLog}', [AiVerificationLogController::class, 'show']);
+
+// n8n Webhooks
+Route::post('/webhooks/n8n/ai-verification', [N8nAiVerificationWebhookController::class, 'store']);
 
 // Resources
 Route::get('/resources', [ResourceController::class, 'index']);

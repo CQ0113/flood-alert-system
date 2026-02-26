@@ -18,14 +18,14 @@ class AiVerificationLogController extends Controller
             ->orderBy('created_at', 'desc');
 
         if ($request->has('action')) {
-            $query->where('action', $request->action);
+            $query->where('action', $request->input('action'));
         }
 
         if ($request->has('report_id')) {
-            $query->where('report_id', $request->report_id);
+            $query->where('report_id', $request->input('report_id'));
         }
 
-        $logs = $query->get()->map(function ($log) {
+        $logs = $query->get()->map(function (AiVerificationLog $log) {
             return $this->formatLog($log);
         });
 
