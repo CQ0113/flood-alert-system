@@ -1,16 +1,5 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Head } from '@inertiajs/react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
-import {
-    reportsApi,
-    aiLogsApi,
-    resourcesApi,
-    weatherWarningsApi,
-    type Report as ApiReport,
-    type AIVerificationLog as ApiAIVerificationLog,
-    type Resource as ApiResource,
-    type WeatherWarning as ApiWeatherWarning,
-} from '@/lib/api';
+import { Head } from '@inertiajs/react';
 import {
     Search,
     MapPin,
@@ -53,6 +42,17 @@ import {
     Locate,
     Loader2,
 } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import {
+    reportsApi,
+    aiLogsApi,
+    resourcesApi,
+    weatherWarningsApi,
+    type Report as ApiReport,
+    type AIVerificationLog as ApiAIVerificationLog,
+    type Resource as ApiResource,
+    type WeatherWarning as ApiWeatherWarning,
+} from '@/lib/api';
 
 type ActiveSection = 'live-map' | 'reports' | 'ai-logs' | 'analytics' | 'resources';
 
@@ -157,7 +157,6 @@ export default function Dashboard() {
     // Geolocation state
     const [isLocating, setIsLocating] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
-    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
 
     // Navigate map to user's current location
     const navigateToMyLocation = useCallback(() => {
@@ -170,7 +169,6 @@ export default function Dashboard() {
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const { latitude, longitude } = position.coords;
-                setUserLocation({ lat: latitude, lng: longitude });
                 
                 if (googleMapRef.current) {
                     googleMapRef.current.panTo({ lat: latitude, lng: longitude });
@@ -837,6 +835,13 @@ export default function Dashboard() {
 
                     {/* Main Content */}
                     <main className="flex-1 p-6 overflow-auto max-h-[calc(100vh-4rem)]">
+                        {isLoading && (
+                            <div className="mb-6 flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-300">
+                                <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                                <span className="text-sm">Loading latest reports, resources, and alerts...</span>
+                            </div>
+                        )}
+
                         {/* Live Map Section */}
                         {activeSection === 'live-map' && (
                             <>

@@ -1,6 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
 import { Head } from '@inertiajs/react';
-import { reportsApi, type Report as ApiReport } from '@/lib/api';
 import {
     Camera,
     MapPin,
@@ -11,6 +9,8 @@ import {
     ChevronDown,
     Loader2,
 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { reportsApi, type Report as ApiReport } from '@/lib/api';
 
 interface NearbyReport {
     id: number;

@@ -4,11 +4,6 @@
 
 const API_BASE = '/api';
 
-interface ApiResponse<T> {
-    data: T;
-    status: number;
-}
-
 async function fetchApi<T>(
     endpoint: string,
     options?: RequestInit

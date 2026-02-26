@@ -1,12 +1,4 @@
-import { useState, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
-import {
-    resourcesApi,
-    disasterAlertsApi,
-    subscriptionsApi,
-    type Resource as ApiResource,
-    type DisasterAlert as ApiDisasterAlert,
-} from '@/lib/api';
 import {
     AlertTriangle,
     Bell,
@@ -22,7 +14,6 @@ import {
     ChevronRight,
     CheckCircle,
     Radio,
-    MessageCircle,
     Phone,
     FileText,
     Camera,
@@ -46,6 +37,14 @@ import {
     Filter,
     Heart,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+    resourcesApi,
+    disasterAlertsApi,
+    subscriptionsApi,
+    type Resource as ApiResource,
+    type DisasterAlert as ApiDisasterAlert,
+} from '@/lib/api';
 
 type ResourceType = 'boat' | 'food' | 'clothing' | 'medical' | 'water' | 'shelter' | 'transport' | 'other';
 
@@ -216,6 +215,15 @@ export default function ClientPortal() {
             <Head title="CuacaGuard - Disaster Alert Portal" />
 
             <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+                {isLoading && (
+                    <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+                        <div className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-slate-300">
+                            <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                            <span className="text-sm">Loading disaster alerts and resources...</span>
+                        </div>
+                    </div>
+                )}
+
                 {/* Critical Alert Banner */}
                 {criticalAlerts.length > 0 && (
                     <div className="bg-red-600 text-white py-2 px-4">
